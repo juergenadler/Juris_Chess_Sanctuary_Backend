@@ -1,0 +1,25 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.9.34728.123
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{9092AA53-FB77-4645-B42D-1CCCA6BD08BD}") = "Juris_Chess_Sanctuary_Backend", "Juris_Chess_Sanctuary_Backend.njsproj", "{28B3E82B-0DEA-450C-81D1-AFEB26F3A369}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{28B3E82B-0DEA-450C-81D1-AFEB26F3A369}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{28B3E82B-0DEA-450C-81D1-AFEB26F3A369}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{28B3E82B-0DEA-450C-81D1-AFEB26F3A369}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{28B3E82B-0DEA-450C-81D1-AFEB26F3A369}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {DAF5B8CC-BBFC-4F8A-A82E-A21E77656997}
+	EndGlobalSection
+EndGlobal
