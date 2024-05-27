@@ -3,6 +3,7 @@
 //
 
 const UserSchema = require("../schemas/UserSchema");
+
 const jwt = require("jsonwebtoken");
 
 const createToken = (_id) => {
@@ -125,11 +126,154 @@ const deleteUserByEmail = async (req, res) => {
 };
 
 
+//
+// GET: Retrieve all associated games by user email
+//
+const getAllAssociatedGamesByUserEmail = async (req, res) => {
+  const { email } = req.params;
+  try {
+    const user = await UserSchema.findOne({ email }).populate('pgngames').exec();
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+    return res.json(user.pgngames);
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ message: 'Error retrieving associated games' });
+  }
+};
+
+
+// GET: Retrieve one game associated by user email
+const getGameByPgnIdAndUserEmail = async (req, res) => {
+  const { email, pgnId } = req.params;
+  try {
+    const user = await UserSchema.findOne({ email }).populate('pgngames').exec();
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+    let games = user.pgngames;
+    if (pgnId) {
+      games = games.filter(game => game.pgn_id === pgnId);
+      if (games.length === 0) {
+        return res.status(404).json({ message: 'Game not found for the user' });
+      }
+    }
+    return res.json(games);
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ message: 'Error retrieving associated games' });
+  }
+};
+
+//
+// addGameByPgnIdAndUserEmail
+// 
+const addGameByPgnIdAndUserEmail = async (req, res) => {
+  const { email, pgnId } = req.params;
+
+  try {
+    // Find the user by email
+    const user = await UserSchema.findOne({ email });
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    // Find the game by its PGN ID
+    const game = await PgnSchema.findOne({ pgn_id: pgnId });
+    if (!game) {
+      return res.status(404).json({ message: 'Game not found' });
+    }
+
+    // REVIEW: Is it really user.pgngames.includes(game._id))?? How is pgngames organized?
+
+    // Check if the game is already associated with the user
+    if (user.pgngames.includes(game._id)) {
+      return res.status(400).json({ message: 'Game already associated with the user' });
+    }
+
+    // Add the game reference to the user's list of games
+    user.pgngames.push(game._id);
+    await user.save();
+
+    return res.status(201).json({ message: 'Game added to user successfully', user });
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ message: 'Error adding game to user' });
+  }
+};
+
+//
+// DELETE: Delete game by PGN ID and user email
+// 
+const deleteGameByPgnIdAndUserEmail = async (req, res) => {
+  const { email, pgnId } = req.params;
+
+  try {
+    // Find the user by email
+    const user = await UserSchema.findOne({ email });
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    // Find the game by its PGN ID
+    const game = await PgnSchema.findOne({ pgn_id: pgnId });
+    if (!game) {
+      return res.status(404).json({ message: 'Game not found' });
+    }
+
+    // Check if the game is associated with the user
+    if (!user.pgngames.includes(game._id)) {
+      return res.status(404).json({ message: 'Game not associated with the user' });
+    }
+
+    // Remove the game reference from the user's list of games
+    user.pgngames = user.pgngames.filter(id => id !== game._id);
+    await user.save();
+
+    return res.json({ message: 'Game deleted from user successfully', user });
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ message: 'Error deleting game from user' });
+  }
+};
+
+//
+// deleteAllGamesByUserEmail DELETE: Delete all games by user email
+// 
+const deleteAllGamesByUserEmail = async (req, res) => {
+  const { email } = req.params;
+
+  try {
+    // Find the user by email
+    const user = await UserSchema.findOne({ email });
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    // Remove all games associated with the user
+    user.pgngames = [];
+    await user.save();
+
+    return res.json({ message: 'All games deleted from user successfully', user });
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ message: 'Error deleting games from user' });
+  }
+};
+
 
 module.exports = {
   loginUser,
   signUpUser,
   getAllUsers,
   getUserByEmail, 
-  deleteUserByEmail
+  deleteUserByEmail,
+  // PGN games' methods to deal with the pgn games associated with the user.
+  // So there are no changes in the PgnSchema collection, only in the UserSchema collection.wss
+  getAllAssociatedGamesByUserEmail,
+  getGameByPgnIdAndUserEmail,
+  addGameByPgnIdAndUserEmail,
+  deleteGameByPgnIdAndUserEmail,
+  deleteAllGamesByUserEmail
 };

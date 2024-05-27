@@ -6,6 +6,7 @@ const mongoose = require("mongoose");
 const bcrypt = require("bcrypt");
 const validator = require("validator");
 
+
 const userSchema = new mongoose.Schema({
   email: {
     type: String,
@@ -15,7 +16,11 @@ const userSchema = new mongoose.Schema({
   password: {
     type: String,
     required: true,
-  } 
+  },
+
+   // Relation user -> pgn is 1 : many
+  pgngames: [{ type: mongoose.Schema.Types.ObjectId, ref: 'PgnSchema' }]
+
 });
 
 // Custom static signup method
