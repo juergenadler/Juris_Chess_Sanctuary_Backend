@@ -3,6 +3,7 @@
 //
 
 const UserSchema = require("../schemas/UserSchema");
+const PgnSchema = require("../schemas/pgnSchema"); // SORRY: Express is highly case sensitive! Providing "../schemas/PgnSchema" here leads to an error.
 
 const jwt = require("jsonwebtoken");
 
@@ -33,9 +34,11 @@ const loginUser = async (req, res) => {
 
 // POST: Sign up user
 //
-// So if testing the POST request (Postman etc.), 
-// place these values in the request BODY, not as a query!! 
-// 
+// So if testing the POST request (Postman etc.),
+// 1) place these values in the request BODY.
+// 2) use the x-www-form-urlencoded option.
+// 3) authorization: Bearer token when it is in your environment variables. 
+// Then Auth Type: JWT Bearer, secret: from your environment variables.
 const signUpUser = async (req, res) => {
   let { email, password } = req.body;
 
@@ -102,6 +105,7 @@ const getUserByEmail = async (req, res) => {
 
 // DELETE: Delete one user by email
 //
+// 28.05.2024: OK
 const deleteUserByEmail = async (req, res) => {
   try {
     let { email } = req.params;
@@ -129,10 +133,11 @@ const deleteUserByEmail = async (req, res) => {
 //
 // GET: Retrieve all associated games by user email
 //
+// 28.05.2024: OK
 const getAllAssociatedGamesByUserEmail = async (req, res) => {
   const { email } = req.params;
   try {
-    const user = await UserSchema.findOne({ email }).populate('pgngames').exec();
+    const user = await UserSchema.findOne({ email }).populate('pgngames').exec();   
     if (!user) {
       return res.status(404).json({ message: 'User not found' });
     }
@@ -143,8 +148,11 @@ const getAllAssociatedGamesByUserEmail = async (req, res) => {
   }
 };
 
-
+//
 // GET: Retrieve one game associated by user email
+// populating the pgngames array in the UserSchema collection so that really a game is returned.
+//
+// 28.05.2024: OK
 const getGameByPgnIdAndUserEmail = async (req, res) => {
   const { email, pgnId } = req.params;
   try {
@@ -167,8 +175,13 @@ const getGameByPgnIdAndUserEmail = async (req, res) => {
 };
 
 //
-// addGameByPgnIdAndUserEmail
-// 
+// POST: addGameByPgnIdAndUserEmail
+//
+// AS we are dealing with the UserSchema, we are not changing the PgnSchema collection.
+// We are only adding a reference to the game in the UserSchema collection.
+// This means: We add an ObjectId to the pgngames array in the UserSchema collection.
+//
+// 28.05.2024: OK
 const addGameByPgnIdAndUserEmail = async (req, res) => {
   const { email, pgnId } = req.params;
 
@@ -205,7 +218,8 @@ const addGameByPgnIdAndUserEmail = async (req, res) => {
 
 //
 // DELETE: Delete game by PGN ID and user email
-// 
+//
+// 28.05.2024: OK
 const deleteGameByPgnIdAndUserEmail = async (req, res) => {
   const { email, pgnId } = req.params;
 
@@ -228,7 +242,7 @@ const deleteGameByPgnIdAndUserEmail = async (req, res) => {
     }
 
     // Remove the game reference from the user's list of games
-    user.pgngames = user.pgngames.filter(id => id !== game._id);
+    user.pgngames = user.pgngames.filter(id => !id.equals(game._id));
     await user.save();
 
     return res.json({ message: 'Game deleted from user successfully', user });
@@ -240,7 +254,8 @@ const deleteGameByPgnIdAndUserEmail = async (req, res) => {
 
 //
 // deleteAllGamesByUserEmail DELETE: Delete all games by user email
-// 
+//
+// 28.05.2024: OK
 const deleteAllGamesByUserEmail = async (req, res) => {
   const { email } = req.params;
 
