@@ -250,11 +250,18 @@ const getPgnCount = async (req, res) => {
 // get all PGN records. No limit set. Use with caution!
 //
 const getAllPgns = async (req, res) => {
+  const startTime = Date.now();
+  console.log(`Process started at: ${new Date(startTime).toISOString()}`);
   try {
     const pgns = await PgnSchema.find();
     res.status(200).json(pgns);
   } catch (error) {
     res.status(400).json({ message: 'Error fetching PGNs', error: error.message });
+  }
+  finally {
+    const endTime = Date.now();
+    console.log(`Process finished at: ${new Date(endTime).toISOString()}`);
+    console.log(`Process took: ${endTime - startTime} ms`);
   }
 };
 
@@ -298,24 +305,39 @@ const getAllPgnsPaginated = async (req, res) => {
 };
 
 //
-// GET: getAllPgnFields
+// GET: getAllPgnByFields
 //
 // Summary: Fetches all PGN fields according to the fields parameter in the URL
-// Example: In the browser, navigate to http://localhost:7000/sanctuary/pgnrouter/pgns/fields/pgn_id%20white%20black%20date
+//
+// Example:
+// In the browser, navigate to http://localhost:7000/sanctuary/pgnrouter/pgns/fields/pgn_id%20white%20black%20date
 // This will return all (!!) PGN records with only the pgn_id, white, black, and date fields.
-// Handle with care!
-// Notes:
+//
+// Strategy;
+// 1) Handle with care because this still can be a lot of data! Nobody needs to retrieve e.g. the pgn contents this way
+// 2) In real life it is fine to enter as many fields as are required to identfy a record or a set of records.
+// These are essentially the record headers that will also be used in the front end to display the records.
+// 3) So: Do this  and then load the record data based the pgn_id you found out this way.
+// 
+// Details:
 // 1) Express handles decoding URL parameters automatically
 // 2) When you want to dynamically specify fields based on a string input, you need to construct a projection object to pass to the find() method.
 // The projection object specifies which fields to include or exclude in the query result.
 // It's necessary because Mongoose requires the fields to be specified as an object when using dynamic field selection.
-// Here's why the projection object is necessary when dynamically selecting fields://
-// 1) Dynamic Field Selection: When the fields to retrieve are specified dynamically as a string, you need to convert that string into an object to pass it to the find() method.Mongoose expects the fields to be provided in this object format for dynamic selection.
-// 2) Projection: The projection object tells MongoDB which fields to include or exclude from the query result.By specifying the fields in the projection object, you control which fields are returned in the query result, providing flexibility and optimization.
-// While the projection object adds a step in constructing the query, it allows for dynamic field selection and provides fine - grained control over the fields returned from the database.
-const getAllPgnFields = async (req) => {
+// The projection object is necessary when dynamically selecting fields:
+// 1) Dynamic Field Selection: When the fields to retrieve are specified dynamically as a
+// string, you need to convert that string into an object to pass it to the find() method.
+// Mongoose expects the fields to be provided in this object format for dynamic selection.
+// 2) Projection: The projection object tells MongoDB which fields to include or exclude from the query result.
+// By specifying the fields in the projection object, you control which fields are returned in the query result.
+// While the projection object adds a step in constructing the query, it allows for dynamic field
+// selection and provides fine - grained control over the fields returned from the database.
+//
+const getAllPgnByFields = async (req, res) => {
+  const startTime = Date.now();
+  console.log(`Process started at: ${new Date(startTime).toISOString()}`);
   try {
-    let projection = {}; 
+    let projection = {};
 
     // Check if the 'fields' parameter exists in the request parameters
     if (!req.params.fields || typeof req.params.fields !== 'string') {
@@ -323,6 +345,7 @@ const getAllPgnFields = async (req) => {
     }
 
     const fields = req.params.fields.trim(); // Get the fields parameter from the URL and remove leading/trailing spaces
+    console.log(`getAllPgnFields: fields ${fields}`);
 
     // If fields are specified, split the fields string into an array of field names
     const fieldArray = fields.split(' ');
@@ -338,13 +361,20 @@ const getAllPgnFields = async (req) => {
       return acc;
     }, {});
 
-    // Fetch PGN documents with specified fields
+    // Fetch PGN documents with specified fields    
+    console.log(`getAllPgnFields: Starting PgnSchema.find -> projection ${JSON.stringify(projection)}`);
     const pgns = await PgnSchema.find({}, projection);
-    return pgns;
+    console.log(`getAllPgnFields: Finished PgnSchema.find -> found ${pgns.length} documents`);
+    res.status(200).json(pgns); 
   } catch (error) {
     throw new Error(`Error fetching PGN fields: ${error.message}`);
+  } finally {
+    const endTime = Date.now();
+    console.log(`Process finished at: ${new Date(endTime).toISOString()}`);
+    console.log(`Process took: ${endTime - startTime} ms`);
   }
 };
+
 
 
 
@@ -380,7 +410,7 @@ module.exports = {
   getPgnCount,
   getAllPgns,
   getAllPgnsPaginated,
-  getAllPgnFields,
+  getAllPgnByFields,
   getPgnByPgnId,
   addPgnToDB,
   deletePgnByPgnId,

@@ -9,7 +9,7 @@ const {
   getPgnCount,
   getAllPgns,
   getAllPgnsPaginated,
-  getAllPgnFields,
+  getAllPgnByFields,
   getPgnByPgnId,
   addPgnToDB,
   deletePgnByPgnId,
@@ -34,7 +34,7 @@ router.get('/pgns/getallpgnspaginated', getAllPgnsPaginated);
 
 // GET: getAllPgnFields. This route fetches all PGN fields.
 // Route to get all PGN fields. 
-router.get('/pgns/fields/:fields', getAllPgnFields);
+router.get('/pgns/fields/:fields', getAllPgnByFields);
 
 // POST: importPgnToDb. This route opens a file dialog to upload a PGN file
 // upload.single("pgnfile") is a middleware that processes the file upload (-> multer)
