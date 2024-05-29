@@ -33,7 +33,8 @@ const pgnSchema = new Schema({
   pgn_id: {
     type: String,
     default: uuidv4,
-    unique: true
+    unique: true,
+    index: true
   },
 
   // What follows here are the so called "Seven Tag Roster"
@@ -54,7 +55,8 @@ const pgnSchema = new Schema({
   // 3) Date: (Starting) Date of the game. in YYYY.MM.DD form.?? is used for unknown values.
   date: {
     type: String,
-    default: defaultDate
+    default: defaultDate,
+    index: true
   },
   // 4) Round: Playing round ordinal of the game.
   round: {
@@ -64,18 +66,21 @@ const pgnSchema = new Schema({
   // 5) White: Player of the white pieces, in order "last name, first name".
   white: {
     type: String,
-    default: defaultWhite
+    default: defaultWhite,
+    index: true
   },
   // 6) Black: Player of the black pieces, same format as White.
   black: {
     type: String,
-    default: defaultBlack
+    default: defaultBlack,
+    index: true
   },
   // 7) Result: Result of the game. 1-0, 0-1, 1/2-1/2, or * (for ongoing games, e.g., games in progress or games where the result is unknown).
   result: {
     type: String,
     enum: ['1-0', '0-1', '1/2-1/2', '*'],
-    default: defaultResult
+    default: defaultResult,
+    index: true
   },
   // The PGN for this game as it is, after parsing the uploaded PGN file that may contain more than one game.
   // So we store here what comes out of the parser after splitting the PGN file into individual games.
@@ -149,5 +154,10 @@ const pgnSchema = new Schema({
 {
   timestamps: true
 });
+
+pgnSchema.index({ white: 1, date: 1 })
+pgnSchema.index({ black: 1, date: 1 })
+pgnSchema.index({ white: 1, black: 1, date: 1 })
+
 
 module.exports = mongoose.model('PgnSchema', pgnSchema);
