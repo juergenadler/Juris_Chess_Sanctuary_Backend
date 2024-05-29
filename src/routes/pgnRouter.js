@@ -32,7 +32,7 @@ router.get('/pgns/getallpgns', getAllPgns);
 // The default limit is 10, and the default page is 1.
 router.get('/pgns/getallpgnspaginated', getAllPgnsPaginated);
 
-// GET: getAllPgnFields. This route fetches all PGN fields.
+// GET: getAllPgnByFields. This route fetches all PGN fields.
 // Route to get all PGN fields. 
 router.get('/pgns/fields/:fields', getAllPgnByFields);
 

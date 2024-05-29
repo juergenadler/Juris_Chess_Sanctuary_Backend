@@ -307,18 +307,19 @@ const getAllPgnsPaginated = async (req, res) => {
 //
 // GET: getAllPgnByFields
 //
-// Summary: Fetches all PGN fields according to the fields parameter in the URL
+// Summary: Fetches all PGN fields according to the fields parameter in the URL.
+// Query parameters can be used to filter the results.
 //
 // Example:
 // In the browser, navigate to http://localhost:7000/sanctuary/pgnrouter/pgns/fields/pgn_id%20white%20black%20date
 // This will return all (!!) PGN records with only the pgn_id, white, black, and date fields.
 //
 // Strategy;
-// 1) Handle with care because this still can be a lot of data! Nobody needs to retrieve e.g. the pgn contents this way
+// 1) Handle with care because this still can be a lot of data! Nobody needs to retrieve e.g. the pgn contents this way!
 // 2) In real life it is fine to enter as many fields as are required to identfy a record or a set of records.
 // These are essentially the record headers that will also be used in the front end to display the records.
 // 3) So: Do this  and then load the record data based the pgn_id you found out this way.
-// 
+//
 // Details:
 // 1) Express handles decoding URL parameters automatically
 // 2) When you want to dynamically specify fields based on a string input, you need to construct a projection object to pass to the find() method.
@@ -332,7 +333,22 @@ const getAllPgnsPaginated = async (req, res) => {
 // By specifying the fields in the projection object, you control which fields are returned in the query result.
 // While the projection object adds a step in constructing the query, it allows for dynamic field
 // selection and provides fine - grained control over the fields returned from the database.
+// 3) There can be query parameters to filter the results based on the specified fields. 
+// So we populate a filter object based on the query parameters and pass it onto the database query.
 //
+// Note: Typically, query parameters do not need to be explicitly defined in the route. So the route definition is still:
+//
+// router.get('/pgns/fields/:fields', getAllPgnByFields);
+//
+// Example for using parameters AND a query in the request:
+//
+// http://localhost:7000/sanctuary/pgnrouter/pgns/fields/pgn_id%20white%20black%20date?white=Doe,%20John&black=Smith,%20Jane
+//
+// Here there are two things that happen:
+// 1) Parameters: The fields pgn_id,  white, black and date are used and evaluated as parameters to specify the fields to be returned.
+// 2) Query parameters: "white=Doe,%20John"" and "black=Smith,%20Jane"  are used to filter the results based on the specified values.
+//
+
 const getAllPgnByFields = async (req, res) => {
   const startTime = Date.now();
   console.log(`Process started at: ${new Date(startTime).toISOString()}`);
@@ -345,7 +361,7 @@ const getAllPgnByFields = async (req, res) => {
     }
 
     const fields = req.params.fields.trim(); // Get the fields parameter from the URL and remove leading/trailing spaces
-    console.log(`getAllPgnFields: fields ${fields}`);
+    console.log(`getAllPgnByFields: Fields ${fields}`);
 
     // If fields are specified, split the fields string into an array of field names
     const fieldArray = fields.split(' ');
@@ -361,11 +377,41 @@ const getAllPgnByFields = async (req, res) => {
       return acc;
     }, {});
 
-    // Fetch PGN documents with specified fields    
-    console.log(`getAllPgnFields: Starting PgnSchema.find -> projection ${JSON.stringify(projection)}`);
-    const pgns = await PgnSchema.find({}, projection);
-    console.log(`getAllPgnFields: Finished PgnSchema.find -> found ${pgns.length} documents`);
-    res.status(200).json(pgns); 
+    console.log(`getAllPgnByFields: Projection ${JSON.stringify(projection)}`);
+
+    // Create the filter object based on query parameters and default behavior
+
+    let filter = {};
+
+    // Filter out query parameters that are not valid fields   
+    const validQueryParams = Object.keys(req.query).filter(param => fieldArray.includes(param));
+    console.log(`getAllPgnFields: Valid query parameters -> ${JSON.stringify(validQueryParams)}`);
+
+    // If no valid fields are present in the query, fall back to a default behavior
+    if (validQueryParams.length === 0) {   
+      // For now, let's return all documents
+      filter = {};
+    } else {
+      // Iterate over all valid query parameters and set filter criteria
+      validQueryParams.forEach(param => {
+        // Include the parameter in the filter
+        filter[param] = req.query[param];
+      });
+    }
+
+    console.log(`getAllPgnByFields: Filter: ${JSON.stringify(filter)}`);
+
+    // Execute the explainQuery query to get some information about the query execution
+    // const explainQuery = PgnSchema.find(filter, projection).lean();
+    // const explainResult = await explainQuery.explain("executionStats");
+    // console.log(`getAllPgnFields: Query explain result -> ${JSON.stringify(explainResult, null, 2)}`);
+
+    // Execute the actual query
+    const pgns = await PgnSchema.find(filter, projection).lean();
+
+    // Send the result
+    console.log(`getAllPgnByFields: Found: ${pgns.length} documents`);
+    res.status(200).json(pgns);
   } catch (error) {
     throw new Error(`Error fetching PGN fields: ${error.message}`);
   } finally {
@@ -374,9 +420,6 @@ const getAllPgnByFields = async (req, res) => {
     console.log(`Process took: ${endTime - startTime} ms`);
   }
 };
-
-
-
 
 //
 // GET: getPgnByPgnId
