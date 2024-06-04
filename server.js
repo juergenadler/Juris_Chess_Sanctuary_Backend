@@ -21,6 +21,9 @@ const isPortInUse = require("./src/utils/checkPort");
 // Router imports go here...
 const userRouter = require("./src/routes/userRouter");
 const pgnRouter = require("./src/routes/pgnRouter");
+const stockfishRouter = require("./src/routes/stockfishRouter");
+
+
 
 async function main() {
   try {
@@ -80,6 +83,7 @@ async function main() {
 
     app.use(`${basePath}/userrouter`, userRouter);    
     app.use(`${basePath}/pgnrouter`, pgnRouter);    
+    app.use(`${basePath}/stockfishrouter`, stockfishRouter);    
 
     // This lists all the endpoints defined so far
     // as an array of objects.

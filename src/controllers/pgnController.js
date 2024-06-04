@@ -160,17 +160,48 @@ const uploadPgnFile = async (req, res) => {
 // Test: With Postman or curl. Details: Ask ChatGPT ;-)
 // This function can be used to add a PGN to the database using the request body.
 // Actually the easier way is to use the uploadPgnFile function ;-)
-// 
+//
+//const addPgnToDB = async (req, res) => {
+//  try {
+//    const newPgn = new PgnSchema(req.body);
+//
+//    await newPgn.save();
+//    res.status(201).json({ message: 'PGN added successfully', pgn: newPgn });
+//  } catch (error) {
+//    res.status(400).json({ message: 'Error adding PGN', error: error.message });
+//  }
+//};
+
+//
+// addPgnToDBImpl
+//
+// parameters: pgnData
+//
+// returns: newPgn, from which the pgn_id can be extracted
+const addPgnToDBImpl = async (pgnData) => {
+  try {
+    const newPgn = new PgnSchema(pgnData);
+    await newPgn.save();
+    return newPgn;
+  } catch (error) {
+    throw new Error('Error creating or saving PGN: ' + error.message);
+  }
+};
+
+// addPgnToDB: Interface function with error handling
+// parameters:
+// req, res
+// returns: newPgn, from which the pgn_id can be extracted
+//
 const addPgnToDB = async (req, res) => {
   try {
-    const newPgn = new PgnSchema(req.body);
-
-    await newPgn.save();
+    const newPgn = await addPgnToDBImpl(req.body);
     res.status(201).json({ message: 'PGN added successfully', pgn: newPgn });
   } catch (error) {
     res.status(400).json({ message: 'Error adding PGN', error: error.message });
   }
 };
+
 
 //
 // DELETE: deletePgn
@@ -204,6 +235,56 @@ const deletePgnByPgnId = async (req, res) => {
 // Summary: Updates a PGN via pgn_id in the database using the request parameters, 
 // using the request body for the updated data
 // 
+//const updatePgnByPgnId = async (req, res) => {
+//  try {
+//    const { pgn_id } = req.params;
+
+//    // Validate UUID format
+//    if (!isUuid(pgn_id)) {
+//      return res.status(400).json({ message: 'Invalid pgn_id format in updatePgnByPgnId' });
+//    }
+
+//    // When using Mongoose's findOneAndUpdate method, only the fields provided in the update object
+//    // (in this case, req.body) are updated in the database. 
+//    // Fields not included in req.body retain their current values in the database.
+//    // Mongoose does not set unspecified fields to undefined.
+
+//    const updatedPgn = await PgnSchema.findOneAndUpdate(
+//      { pgn_id },
+//      req.body,
+//      { new: true, runValidators: true } // Return the updated document and run schema validators
+//    );
+
+//    if (!updatedPgn) {
+//      return res.status(404).json({ message: 'PGN not found' });
+//    }
+
+//    res.status(200).json({ message: 'PGN updated successfully', pgn: updatedPgn });
+//  } catch (error) {
+//    res.status(400).json({ message: 'Error updating PGN', error: error.message });
+//  }
+//};
+
+const updatePgnByPgnIdImpl = async (pgn_id, updateData) => {
+  try {
+    const updatedPgn = await PgnSchema.findOneAndUpdate(
+      { pgn_id },
+      updateData,
+      { new: true, runValidators: true } // Return the updated document and run schema validators
+    );
+
+    return updatedPgn;
+  } catch (error) {
+    throw new Error('Error updating PGN: ' + error.message);
+  }
+};
+
+//
+// PUT: updatePgnByPgnId
+//
+// Summary: Updates a PGN via pgn_id in the database using the request parameters,
+// using the request body for the updated data
+// 
 const updatePgnByPgnId = async (req, res) => {
   try {
     const { pgn_id } = req.params;
@@ -213,11 +294,7 @@ const updatePgnByPgnId = async (req, res) => {
       return res.status(400).json({ message: 'Invalid pgn_id format in updatePgnByPgnId' });
     }
 
-    const updatedPgn = await PgnSchema.findOneAndUpdate(
-      { pgn_id },
-      req.body,
-      { new: true, runValidators: true } // Return the updated document and run schema validators
-    );
+    const updatedPgn = await updatePgn(pgn_id, req.body);
 
     if (!updatedPgn) {
       return res.status(404).json({ message: 'PGN not found' });
@@ -228,6 +305,9 @@ const updatePgnByPgnId = async (req, res) => {
     res.status(400).json({ message: 'Error updating PGN', error: error.message });
   }
 };
+
+
+
 
 //
 // GET: getPgnCount
@@ -348,7 +428,6 @@ const getAllPgnsPaginated = async (req, res) => {
 // 1) Parameters: The fields pgn_id,  white, black and date are used and evaluated as parameters to specify the fields to be returned.
 // 2) Query parameters: "white=Doe,%20John"" and "black=Smith,%20Jane"  are used to filter the results based on the specified values.
 //
-
 const getAllPgnByFields = async (req, res) => {
   const startTime = Date.now();
   console.log(`Process started at: ${new Date(startTime).toISOString()}`);
@@ -388,7 +467,7 @@ const getAllPgnByFields = async (req, res) => {
     console.log(`getAllPgnFields: Valid query parameters -> ${JSON.stringify(validQueryParams)}`);
 
     // If no valid fields are present in the query, fall back to a default behavior
-    if (validQueryParams.length === 0) {   
+    if (validQueryParams.length === 0) {
       // For now, let's return all documents
       filter = {};
     } else {
@@ -426,26 +505,56 @@ const getAllPgnByFields = async (req, res) => {
 //
 // Get a PGN by pgn_id from the database using the request parameters
 // 
+//const getPgnByPgnId = async (req, res) => {
+//  try {
+//    const { pgn_id } = req.params;
+//
+//    // Validate UUID format
+//    if (!isUuid(pgn_id)) {
+//      return res.status(400).json({ message: 'Invalid pgn_id format in getPgnByPgnId' });
+//    }
+//
+//    const pgn = await PgnSchema.findOne({ pgn_id });
+//
+//    if (!pgn) {
+//      return res.status(404).json({ message: 'PGN not found' });
+//    }
+//
+//    res.status(200).json(pgn);
+//  } catch (error) {
+//    res.status(400).json({ message: 'Error fetching PGN', error: error.message });
+//  }
+//};
+
 const getPgnByPgnId = async (req, res) => {
+  const { id } = req.params;
   try {
-    const { pgn_id } = req.params;
-
-    // Validate UUID format
-    if (!isUuid(pgn_id)) {
-      return res.status(400).json({ message: 'Invalid pgn_id format in getPgnByPgnId' });
+    const game = await getPgnByPgnIdImpl(id);
+    if (game) {
+      res.status(200).json({ game });
+    } else {
+      res.status(404).json({ error: 'Game not found' });
     }
-
-    const pgn = await PgnSchema.findOne({ pgn_id });
-
-    if (!pgn) {
-      return res.status(404).json({ message: 'PGN not found' });
-    }
-
-    res.status(200).json(pgn);
   } catch (error) {
-    res.status(400).json({ message: 'Error fetching PGN', error: error.message });
+    res.status(500).json({ error: error.message });
   }
 };
+
+const getPgnByPgnIdImpl = async (id) => {
+  try {
+    return await PgnSchema.findOne({ pgn_id: id });
+  } catch (error) {
+    throw new Error('Error finding game: ' + error.message);
+  }
+};
+
+
+
+
+
+
+
+
 
 
 
@@ -459,5 +568,7 @@ module.exports = {
   deletePgnByPgnId,
   updatePgnByPgnId,
   uploadPgnFile,
-  upload
+  upload,
+  addPgnToDBImpl,
+  getPgnByPgnIdImpl
 };
