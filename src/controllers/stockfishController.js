@@ -1,4 +1,4 @@
-// controllers/chessController.js
+// controllers/stockfishController.js
 
 const mongoose = require('mongoose');
 const { Chess } = require('chess.js');
@@ -41,10 +41,15 @@ const isExecutable = async (filePath) => {
 
 let Engine;
 
-// Import the chess-uci library (no other chance to do this, because ES6 and "require"" is blocked)
+// Import the chess-uci library (no other chance to do this, because it is ES6 and "require"" is blocked)
+// https://github.com/tidynail/chess-uci
+// https://www.npmjs.com/package/chess-uci
+//
 import('chess-uci').then(chessUci => {
   Engine = chessUci.Engine;
-});
+}).catch(error => {
+  console.error('Failed to import chess-uci:', error);
+  });
 
 let stockfish; // Stockfish engine instance, is being initialized in initEngine.
 
@@ -59,10 +64,17 @@ const initEngine = async (req, res) => {
         throw new Error('Engine class not loaded yet');
       }
       stockfish = new Engine(enginePath, { log: true });   // log all messages
-      await stockfish.uci();
+      console.log("@@@@@@@@@@@@@@@@@@@@" , stockfish);
+
+      await stockfish.uci(); // Tell the engine we are talking UCI
       stockfish.position(); // Set the initial position, which might not be the start position later
-      await stockfish.isready();  
-   
+      await stockfish.isready(); // Are you ready?
+
+        stockfish.on('data', (data) => {
+        sendLogUpdate(data.toString());
+      });
+
+
       res.status(200).json({ status: 'Stockfish engine initialized and ready to use.' });
     } else {
       res.status(200).json({ status: 'Stockfish engine is already initialized.' });
@@ -71,6 +83,43 @@ const initEngine = async (req, res) => {
     res.status(500).json({ error: error.message });
   }
 };
+
+//
+// quitEngine
+//
+// POST: /engine/quit
+const quitEngine = async (req, res) => {
+  try {
+    if (!stockfish) {
+      return res.status(500).json({ error: 'Stockfish engine is not initialized.' });
+    }
+
+    await stockfish.quit();
+    res.status(200).json({ status: 'Stockfish terminated successfully.' });
+  } catch (error) {
+    console.error('Failed to quit:', error);
+    res.status(500).json({ error: 'Failed to quit', details: error.message });
+  }
+};
+
+//
+// stopEngine
+//
+// POST: /engine/stop
+const stopEngine = async (req, res) => {
+  try {
+    if (!stockfish) {
+      return res.status(500).json({ error: 'Stockfish engine is not initialized.' });
+    }
+
+    await stockfish.stop();
+    res.status(200).json({ status: 'Stockfish calculations stopped!' });
+  } catch (error) {
+    console.error('Failed to stop calculations:', error);
+    res.status(500).json({ error: 'Failed to to stop calculations', details: error.message });
+  }
+};
+
 
 
 /**
@@ -106,14 +155,26 @@ const makeMove = async (req, res) => {
 
 //
 //  analyze
+// 
 //  POST: /engine/analyze
-//  Summary: Set analysis modus that can be interrrupted by stopping the engine.
+//  Summary: Set analysis modus that can be interrrupted by stopping the engine. So you have to stop the engine explicitly.
+//  Example: POST http://localhost:7000/engine/analyze
+//   const data = await response.json();
+//   const bestMove = data.bestmove;
+//   const ponder = data.ponder;
+//
 const analyze = async (req, res) => {
   try {
     if (stockfish) {
       const result = await stockfish.go(); // This should pass "go infinite" and run until stopped explicitly
-      const bestmove = result.bestmove;    // So: What do we get here? Some implementations rely to handle this after they stopped the engine
-      res.status(200).json({ status: 'Stockfish engine in analysis mode.' });
+      // ..and continue here when stopped:
+      const bestmove = result.bestmove;    // Extracting the best move
+      const ponder = result.ponder;        // Extracting the ponder move
+      res.status(200).json({
+        status: 'Stockfish returned from analysis mode.',
+        bestmove: bestmove,
+        ponder: ponder
+      });
     } else {
       res.status(400).json({ status: 'Stockfish engine not initialized.' });
     }
@@ -121,6 +182,7 @@ const analyze = async (req, res) => {
     res.status(500).json({ error: error.message });
   }
 }
+
 
 //
 //  Setposition
@@ -218,13 +280,42 @@ const updateGame = async (req, res) => {
 };
 
 
+// SSE endpoint to handle client connections
+let clients = []; // Array to hold SSE clients
+
+const sse = (req, res) => {
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+  res.flushHeaders(); // flush the headers to establish SSE
+
+  const clientId = Date.now();
+  const newClient = {
+    id: clientId,
+    res
+  };
+
+  clients.push(newClient);
+
+  req.on('close', () => {
+    clients = clients.filter(client => client.id !== clientId);
+  });
+};
+
+// Function to send updates to all connected SSE clients
+const sendUpdate = (data) => {
+  clients.forEach(client => client.res.write(`data: ${JSON.stringify(data)}\n\n`));
+};
 
 module.exports = {
   initEngine,
+  quitEngine,
+  stopEngine,
   analyze,
   setPosition,
   makeMove,
   saveGame,
   loadGame,
-  updateGame 
+  updateGame,
+  sse
 };
