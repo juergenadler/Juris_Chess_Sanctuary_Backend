@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Stockfish Live Log</title>
+</head>
+<body>
+  <h1>Stockfish live log</h1>
+  <div id="log"></div>
+
+  <script>
+      const eventSource = new EventSource("/sanctuary/stockfishrouter/sse");
+
+      eventSource.onmessage = function (event) {
+        const data = JSON.parse(event.data);
+        console.log(data);
+
+        // Append the data to the log div
+        const logDiv = document.getElementById("log");
+        logDiv.innerHTML += `<p>${data}</p>`;
+      };
+
+      // Handle connection errors
+      eventSource.onerror = function (event) {
+        console.error("EventSource failed:", event);
+      };
+  </script>
+</body>
+</html>

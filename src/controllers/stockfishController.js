@@ -39,6 +39,14 @@ const isExecutable = async (filePath) => {
   }
 };
 
+
+// Send log updates to all connected clients via SSE
+const sendLogUpdate = (data) => {
+  clients.forEach((client) =>
+    client.res.write(`data: ${JSON.stringify(data)}\n\n`)
+  );
+};
+
 let Engine;
 
 // Import the chess-uci library (no other chance to do this, because it is ES6 and "require"" is blocked)
@@ -49,40 +57,39 @@ import('chess-uci').then(chessUci => {
   Engine = chessUci.Engine;
 }).catch(error => {
   console.error('Failed to import chess-uci:', error);
-  });
+});
 
 let stockfish; // Stockfish engine instance, is being initialized in initEngine.
 
-
+//
+// initEngine: Initialize the Stockfish engine
+//
 const initEngine = async (req, res) => {
   try {
     await doesExist(enginePath);
     await isExecutable(enginePath);
     if (!stockfish) {
-      // Make sure the Engine class has been imported
       if (!Engine) {
-        throw new Error('Engine class not loaded yet');
+        throw new Error("Engine class not loaded yet");
       }
-      stockfish = new Engine(enginePath, { log: true });   // log all messages
-      console.log("@@@@@@@@@@@@@@@@@@@@" , stockfish);
+      stockfish = await Engine.start(enginePath, true);  // await stockfish.uci(); is included in the start method
 
-      await stockfish.uci(); // Tell the engine we are talking UCI
-      stockfish.position(); // Set the initial position, which might not be the start position later
-      await stockfish.isready(); // Are you ready?
-
-        stockfish.on('data', (data) => {
-        sendLogUpdate(data.toString());
-      });
-
-
-      res.status(200).json({ status: 'Stockfish engine initialized and ready to use.' });
+    
+      stockfish.position();
+      await stockfish.isready();
+      res
+        .status(200)
+        .json({ status: "Stockfish engine initialized and ready to use." });
     } else {
-      res.status(200).json({ status: 'Stockfish engine is already initialized.' });
+      res
+        .status(200)
+        .json({ status: "Stockfish engine is already initialized." });
     }
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
 };
+
 
 //
 // quitEngine
@@ -103,7 +110,7 @@ const quitEngine = async (req, res) => {
 };
 
 //
-// stopEngine
+// stopEngine: Stop the Stockfish engine calculations
 //
 // POST: /engine/stop
 const stopEngine = async (req, res) => {
@@ -123,6 +130,8 @@ const stopEngine = async (req, res) => {
 
 
 /**
+ * MakeMove
+ * POST: /engine/move/:depth
  * Handles a request to make a move with the Stockfish engine.
  * The search depth for the move can be specified as a parameter in the URL.
  * If no depth is specified, a default value of 20 is used.
@@ -132,23 +141,38 @@ const stopEngine = async (req, res) => {
  */
 const makeMove = async (req, res) => {
   try {
-    // Check if the Stockfish engine is initialized
     if (!stockfish) {
-      return res.status(500).json({ error: 'Stockfish engine is not initialized.' });
+      return res
+        .status(500)
+        .json({ error: "Stockfish engine is not initialized." });
     }
 
-    // Get the search depth from the URL, or use a default value of 20
     const depth = req.params.depth || 20;
 
-    // Start the engine's calculation process with the specified search depth
-    const result = await stockfish.go({ depth: Number(depth) });
-
-    // Send a response with the best move found by the engine
-    res.status(200).json({ bestMove: result.bestmove });
+    stockfish.go(
+      { depth: Number(depth) },
+      (info) => {
+        if (info.depth) {
+          const logMessage = `depth: ${info.depth}, info: ${JSON.stringify(
+            info
+          )}`;
+          console.log(logMessage);
+          sendLogUpdate(logMessage); // Send this to the frontend via SSE
+        }
+      },
+      (result) => {
+        const bestpv = stockfish.pvs[0];
+        const logMessage = `${bestpv.score.str}/${bestpv.depth} ${result.bestmove} in ${bestpv.time}ms, ${bestpv.nodes} searched`;
+        console.log(logMessage);
+        sendLogUpdate(logMessage); // Send this to the frontend via SSE
+        res.status(200).json({ bestMove: result.bestmove });
+      }
+    );
   } catch (error) {
-    // Log the error and send a response with an error status code and message
-    console.error('Failed to make move:', error);
-    res.status(500).json({ error: 'Failed to make move', details: error.message });
+    console.error("Failed to make move:", error);
+    res
+      .status(500)
+      .json({ error: "Failed to make move", details: error.message });
   }
 };
 
@@ -188,10 +212,10 @@ const analyze = async (req, res) => {
 //  Setposition
 //  POST: /engine/setposition
 //
-//  Expecting FEN string and LAN array in the request body. We can handle this as JSON object,
+// Expecting FEN string and LAN array in the request body. We can handle this as JSON object,
 // also in Postman, we can use the raw JSON format to send the request.
 //
-// The moves in the position command of the UCI protocol are expected to be in
+// The moves in the "position" command of the UCI protocol are expected to be in
 // long algebraic notation(LAN). Each move consists of the starting square and the
 // ending square, optionally followed by the promotion piece(in case of pawn promotion).
 //
@@ -224,6 +248,64 @@ const setPosition = async (req, res) => {
     res.status(500).json({ error: 'Failed to set position', details: error.message });
   }
 };
+
+
+//
+// setMoves: A variation of setPosition() that accepts moves as a URL parameter
+// POST: /engine/setmoves/:moves
+//
+const setMoves = async (req, res) => {
+  try {
+    // Extract and decode the moves from the URL
+    const moves = decodeURIComponent(req.params.moves);
+
+    // Split the moves by spaces
+    const components = moves.split(' ');
+
+    // Initialize variables for FEN and moves
+    let fen = null;
+    let moveList = [];
+    let invalidMoves = [];
+
+    // Check if the first component is a FEN position string
+    // No validation is done here, as the chess.js library will handle this
+    if (components[0].length > 10) {
+      fen = components[0];
+      moveList = components.slice(1);
+    } else {
+      moveList = components;
+    }
+
+    // Set to the default starting position if FEN is still null
+    if (!fen) {
+      fen = FENstartposition;
+    }
+
+    // Identify invalid moves and log them
+    // This is just a simple check to ensure that the moves are in the correct format
+    // Example moves: ["e2e4", "e7e5", "g7g8q"]
+    moveList.forEach(move => {
+      if (move.length < 4 || move.length > 5) {
+        invalidMoves.push(move);
+      }
+    });
+
+    if (invalidMoves.length > 0) {
+      console.log('Invalid moves:', invalidMoves);
+    }
+
+    // Call the chess engine with the parsed FEN and all moves
+    const positionResult = await stockfish.position({ fen, moves: moveList });
+
+    // Send the response (you might want to customize this based on your needs)
+    res.send(`Received position: ${JSON.stringify(positionResult)}`);
+  } catch (error) {
+    // Handle potential errors
+    res.status(400).send(`Error processing moves: ${error.message}`);
+  }
+};
+
+
 
 //
 // load game by pgn id
@@ -284,28 +366,28 @@ const updateGame = async (req, res) => {
 let clients = []; // Array to hold SSE clients
 
 const sse = (req, res) => {
-  res.setHeader('Content-Type', 'text/event-stream');
-  res.setHeader('Cache-Control', 'no-cache');
-  res.setHeader('Connection', 'keep-alive');
-  res.flushHeaders(); // flush the headers to establish SSE
+  console.log("SSE Connection established");
+
+  res.setHeader("Content-Type", "text/event-stream");
+  res.setHeader("Cache-Control", "no-cache");
+  res.setHeader("Connection", "keep-alive");
+  res.status(200).flushHeaders(); // Send the headers and establish the SSE connection
 
   const clientId = Date.now();
   const newClient = {
     id: clientId,
-    res
+    res,
   };
 
   clients.push(newClient);
 
-  req.on('close', () => {
-    clients = clients.filter(client => client.id !== clientId);
+  req.on("close", () => {
+    console.log("SSE CONNECTION CLOSED");
+    clients = clients.filter((client) => client.id !== clientId);
   });
 };
 
-// Function to send updates to all connected SSE clients
-const sendUpdate = (data) => {
-  clients.forEach(client => client.res.write(`data: ${JSON.stringify(data)}\n\n`));
-};
+
 
 module.exports = {
   initEngine,
@@ -313,6 +395,7 @@ module.exports = {
   stopEngine,
   analyze,
   setPosition,
+  setMoves,
   makeMove,
   saveGame,
   loadGame,

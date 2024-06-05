@@ -8,6 +8,7 @@ const cors = require("cors");
 const dotenv = require("dotenv");
 dotenv.config();  // Load environment variables...
 const colors = require("colors");
+const path = require("path"); 
 
 // Our stuff...
 
@@ -22,7 +23,6 @@ const isPortInUse = require("./src/utils/checkPort");
 const userRouter = require("./src/routes/userRouter");
 const pgnRouter = require("./src/routes/pgnRouter");
 const stockfishRouter = require("./src/routes/stockfishRouter");
-
 
 
 async function main() {
@@ -78,9 +78,17 @@ async function main() {
     // Define your routes and middleware here
     //
     // Example:
-    // 
+    //
     // So the mount path is: http://localhost:PORT/<api name>/userrouter for userRouter etc.
 
+    // Serve static files from the "public" directory
+    app.use(express.static(path.join(__dirname, "public")));
+    // Add a route to serve the HTML file. Test for sse in stockfishrouter
+    app.get(`${basePath}/stockfishrouter/test`, (req, res) => {
+      res.sendFile(path.join(__dirname, "public", "index.html")); // Adjust the path as needed
+    });
+
+    // Mount the regular routers.
     app.use(`${basePath}/userrouter`, userRouter);    
     app.use(`${basePath}/pgnrouter`, pgnRouter);    
     app.use(`${basePath}/stockfishrouter`, stockfishRouter);    

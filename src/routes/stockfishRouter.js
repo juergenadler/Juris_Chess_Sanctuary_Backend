@@ -11,6 +11,7 @@ const {
   stopEngine,
   analyze,
   setPosition,
+  setMoves,
   makeMove,
   saveGame,
   loadGame,
@@ -27,8 +28,12 @@ router.post('/engine/quit', quitEngine);
 // Stop the Stockfish engine calculations
 router.post('/engine/stop', stopEngine);
 
-// Set the position of the chess board
+// Set the position of the chess board via request body
 router.post('/engine/setposition', setPosition);
+
+// Set the moves on the chess board as URL parameters
+// Example: /engine/setmoves/e2e4 e7e5
+router.post('engine/setmoves/:moves', setMoves);
 
 // Make a move with the Stockfish engine
 router.post('/engine/move/:depth', makeMove);
