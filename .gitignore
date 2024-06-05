@@ -8,6 +8,7 @@
 bin/
 node_modules/
 obj/
+uploads/
 
 # single files
 package-lock.json
@@ -15,3 +16,4 @@ package-lock.json
 # wildcards
 *.njsproj.user
 *.user
+/src/utils/readFileContent.js

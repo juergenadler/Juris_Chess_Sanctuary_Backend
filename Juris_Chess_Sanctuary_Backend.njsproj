@@ -23,10 +23,12 @@
     <Content Include="package.json" />
     <Content Include="dbinit.js" />
     <Content Include="server.js" />
+    <Content Include="src\controllers\stockfishController.js" />
     <Content Include="src\controllers\userController.js">
       <SubType>Code</SubType>
     </Content>
     <Content Include="src\middleware\requireAuth.js" />
+    <Content Include="src\routes\stockfishRouter.js" />
     <Content Include="src\routes\userRouter.js">
       <SubType>Code</SubType>
     </Content>
@@ -35,6 +37,9 @@
     </Content>
   </ItemGroup>
   <ItemGroup>
+    <Folder Include="engines\" />
+    <Folder Include="engines\stockfish\" />
+    <Folder Include="engines\stockfish\16\" />
     <Folder Include="src\controllers\" />
     <Folder Include="src\" />
     <Folder Include="src\middleware\" />
