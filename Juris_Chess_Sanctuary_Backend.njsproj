@@ -23,6 +23,7 @@
     <Content Include="package.json" />
     <Content Include="dbinit.js" />
     <Content Include="server.js" />
+    <Content Include="src\controllers\loggingEngine.js" />
     <Content Include="src\controllers\stockfishController.js" />
     <Content Include="src\controllers\userController.js">
       <SubType>Code</SubType>

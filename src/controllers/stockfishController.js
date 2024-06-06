@@ -1,20 +1,20 @@
-// controllers/stockfishController.js
+// Stockfishcontroller.js 
 
 const mongoose = require('mongoose');
 const { Chess } = require('chess.js');
 const fs = require('fs').promises;
 const path = require('path');
 
-
 const PgnSchema = require('../schemas/pgnSchema');
 const {
   addPgnToDBImpl,
   getPgnByPgnIdImpl,
-  updatePgnByPgnIdImpl } = require('./pgnController'); // Is this good practice? Should we import the implementation functions from the controller?
+  updatePgnByPgnIdImpl
+} = require('./pgnController'); // Importing the implementation functions from the controller
 
+const initLoggingEngine = require('./LoggingEngine'); // Import the LoggingEngine initialization function
 
 // Path to the Stockfish engine executable. Actually we are in the controllers folder, so we need to go up two levels to find the engines folder.
-
 const stockfishPath = '../../engines/stockfish/16/stockfish-windows-x86-64-sse41-popcnt.exe';
 const enginePath = path.resolve(__dirname, stockfishPath);
 
@@ -22,7 +22,7 @@ const enginePath = path.resolve(__dirname, stockfishPath);
 // As we build up the game history from the initial position by adding a moves array we need this constant more often ;-)
 const FENstartposition = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
 
-// Check if the file exists and is executable
+// Helper: Check if the file exists 
 const doesExist = async (filePath) => {
   try {
     await fs.access(filePath, fs.constants.F_OK);
@@ -31,6 +31,7 @@ const doesExist = async (filePath) => {
   }
 };
 
+// Helper ...and is executable
 const isExecutable = async (filePath) => {
   try {
     await fs.access(filePath, fs.constants.X_OK);
@@ -40,24 +41,19 @@ const isExecutable = async (filePath) => {
 };
 
 
-// Send log updates to all connected clients via SSE
-const sendLogUpdate = (data) => {
+// Send log updates to all connected clients via SSE. Called by the overrides in the LoggingEngine class.
+const sendLogUpdateReceived = (data) => {
   clients.forEach((client) =>
-    client.res.write(`data: ${JSON.stringify(data)}\n\n`)
+    client.res.write(`<< ${JSON.stringify(data)}\n\n`)
   );
 };
 
-let Engine;
-
-// Import the chess-uci library (no other chance to do this, because it is ES6 and "require"" is blocked)
-// https://github.com/tidynail/chess-uci
-// https://www.npmjs.com/package/chess-uci
-//
-import('chess-uci').then(chessUci => {
-  Engine = chessUci.Engine;
-}).catch(error => {
-  console.error('Failed to import chess-uci:', error);
-});
+// Send log updates to all connected clients via SSE. Called by the overrides in LoggingEngine class.
+const sendLogUpdateSent = (data) => {
+  clients.forEach((client) =>
+    client.res.write(`>> ${JSON.stringify(data)}\n\n`)
+  );
+};
 
 let stockfish; // Stockfish engine instance, is being initialized in initEngine.
 
@@ -69,11 +65,8 @@ const initEngine = async (req, res) => {
     await doesExist(enginePath);
     await isExecutable(enginePath);
     if (!stockfish) {
-      if (!Engine) {
-        throw new Error("Engine class not loaded yet");
-      }
-      stockfish = await Engine.start(enginePath, true);  // await stockfish.uci(); is included in the start method
-
+      const LoggingEngine = await initLoggingEngine();
+      stockfish = await LoggingEngine.start(enginePath, true, true, true, sendLogUpdateSent, sendLogUpdateReceived);
 
       stockfish.position();      // Set the initial position
       await stockfish.isready(); // Wait for the engine to be ready
@@ -102,6 +95,8 @@ const quitEngine = async (req, res) => {
     }
 
     await stockfish.quit();
+    stockfish = null; // Reset the stockfish variable, hoping we do not eat resources
+
     res.status(200).json({ status: 'Stockfish terminated successfully.' });
   } catch (error) {
     console.error('Failed to quit:', error);
@@ -119,11 +114,11 @@ const stopEngine = async (req, res) => {
       return res.status(500).json({ error: 'Stockfish engine is not initialized.' });
     }
 
-    await stockfish.stop();
+    const result = await stockfish.stop(); // How to get the best move?
     res.status(200).json({ status: 'Stockfish calculations stopped!' });
   } catch (error) {
     console.error('Failed to stop calculations:', error);
-    res.status(500).json({ error: 'Failed to to stop calculations', details: error.message });
+    res.status(500).json({ error: 'Failed to stop calculations', details: error.message });
   }
 };
 
@@ -151,22 +146,22 @@ const makeMove = async (req, res) => {
 
     stockfish.go(
       { depth: Number(depth) },
-      (info) => {
-        if (info.depth) {
-          const logMessage = `depth: ${info.depth}, info: ${JSON.stringify(
-            info
-          )}`;
-          console.log(logMessage);
-          sendLogUpdate(logMessage); // Send this to the frontend via SSE
-        }
-      },
-      (result) => {
-        const bestpv = stockfish.pvs[0];
-        const logMessage = `${bestpv.score.str}/${bestpv.depth} ${result.bestmove} in ${bestpv.time}ms, ${bestpv.nodes} searched`;
-        console.log(logMessage);
-        sendLogUpdate(logMessage); // Send this to the frontend via SSE
-        res.status(200).json({ bestMove: result.bestmove });
-      }
+      //  (info) => {
+      //    if (info.depth) {
+      //      const logMessage = `depth: ${info.depth}, info: ${JSON.stringify(
+      //        info
+      //      )}`;
+      //      console.log(logMessage);
+      //      sendLogUpdateSent(logMessage); // Send this to the frontend via SSE
+      //    }
+      //  },
+      //  (result) => {
+      //    const bestpv = stockfish.pvs[0];
+      //    const logMessage = `${bestpv.score.str}/${bestpv.depth} ${result.bestmove} in ${bestpv.time}ms, ${bestpv.nodes} searched`;
+      //    console.log(logMessage);
+      //    sendLogUpdateSent(logMessage); // Send this to the frontend via SSE
+      //    res.status(200).json({ bestMove: result.bestmove });
+      //  }
     );
   } catch (error) {
     console.error("Failed to make move:", error);
@@ -182,7 +177,7 @@ const makeMove = async (req, res) => {
 // 
 //  POST: /engine/analyze
 //  Summary: Set analysis modus that can be interrrupted by stopping the engine. So you have to stop the engine explicitly.
-//  Example: POST http://localhost:7000/engine/analyze
+//  Example: POST http://localhost:7000/stockfishrouter/engine/analyze
 //   const data = await response.json();
 //   const bestMove = data.bestmove;
 //   const ponder = data.ponder;
@@ -190,28 +185,28 @@ const makeMove = async (req, res) => {
 const analyze = async (req, res) => {
   try {
     stockfish.go(
-      { depth: "infinite" }, // anything else to set the engine in analysis mode crashes the app
-      (info) => {
-        if (info.depth) {
-          const logMessage = `depth: ${info.depth}, info: ${JSON.stringify(
-            info
-          )}`;
-          console.log(logMessage);
-          sendLogUpdate(logMessage); // Send this to the frontend via SSE
-        }
-      },
-      (result) => {
-        const bestpv = stockfish.pvs[0];
-        const logMessage = `${bestpv.score.str}/${bestpv.depth} ${result.bestmove} in ${bestpv.time}ms, ${bestpv.nodes} searched`;
-        console.log(logMessage);
-        sendLogUpdate(logMessage); // Send this to the frontend via SSE
-        res.status(200).json({ bestMove: result.bestmove });
-      }
+      //{ depth: "infinite" }, // anything else to set the engine in analysis mode crashes the app
+      //(info) => {
+      //  if (info.depth) {
+      //    const logMessage = `depth: ${info.depth}, info: ${JSON.stringify(
+      //      info
+      //    )}`;
+      //    console.log(logMessage);
+      //    sendLogUpdateSent(logMessage); // Send this to the frontend via SSE
+      //  }
+      //},
+      //(result) => {
+      //  const bestpv = stockfish.pvs[0];
+      //  const logMessage = `${bestpv.score.str}/${bestpv.depth} ${result.bestmove} in ${bestpv.time}ms, ${bestpv.nodes} searched`;
+      //  console.log(logMessage);
+      //  sendLogUpdateSent(logMessage); // Send this to the frontend via SSE
+      //  res.status(200).json({ bestMove: result.bestmove });
+      //}
     );
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
-}
+};
 
 
 //
@@ -245,7 +240,7 @@ const setPosition = async (req, res) => {
       return res.status(500).json({ error: 'Stockfish engine is not initialized.' });
     }
 
-    const fen = req.body.fen || 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1'; // Use the FEN string from the request body, or the start position if it's not provided
+    const fen = req.body.fen || FENstartposition; // Use the FEN string from the request body, or the start position if it's not provided
     const moves = req.body.moves || []; // Use the moves from the request body, or an empty array if they're not provided
     await stockfish.position({ fen, moves });
     res.status(200).json({ status: 'Position set successfully' });
@@ -366,7 +361,6 @@ const updateGame = async (req, res) => {
     res.status(500).json({ error: error.message });
   }
 };
-
 
 // SSE endpoint to handle client connections
 let clients = []; // Array to hold SSE clients
