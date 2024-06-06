@@ -62,7 +62,7 @@ import('chess-uci').then(chessUci => {
 let stockfish; // Stockfish engine instance, is being initialized in initEngine.
 
 //
-// initEngine: Initialize the Stockfish engine
+// initEngine: Initialize Stockfish
 //
 const initEngine = async (req, res) => {
   try {
@@ -74,9 +74,9 @@ const initEngine = async (req, res) => {
       }
       stockfish = await Engine.start(enginePath, true);  // await stockfish.uci(); is included in the start method
 
-    
-      stockfish.position();
-      await stockfish.isready();
+
+      stockfish.position();      // Set the initial position
+      await stockfish.isready(); // Wait for the engine to be ready
       res
         .status(200)
         .json({ status: "Stockfish engine initialized and ready to use." });
@@ -189,19 +189,25 @@ const makeMove = async (req, res) => {
 //
 const analyze = async (req, res) => {
   try {
-    if (stockfish) {
-      const result = await stockfish.go(); // This should pass "go infinite" and run until stopped explicitly
-      // ..and continue here when stopped:
-      const bestmove = result.bestmove;    // Extracting the best move
-      const ponder = result.ponder;        // Extracting the ponder move
-      res.status(200).json({
-        status: 'Stockfish returned from analysis mode.',
-        bestmove: bestmove,
-        ponder: ponder
-      });
-    } else {
-      res.status(400).json({ status: 'Stockfish engine not initialized.' });
-    }
+    stockfish.go(
+      { depth: "infinite" }, // anything else to set the engine in analysis mode crashes the app
+      (info) => {
+        if (info.depth) {
+          const logMessage = `depth: ${info.depth}, info: ${JSON.stringify(
+            info
+          )}`;
+          console.log(logMessage);
+          sendLogUpdate(logMessage); // Send this to the frontend via SSE
+        }
+      },
+      (result) => {
+        const bestpv = stockfish.pvs[0];
+        const logMessage = `${bestpv.score.str}/${bestpv.depth} ${result.bestmove} in ${bestpv.time}ms, ${bestpv.nodes} searched`;
+        console.log(logMessage);
+        sendLogUpdate(logMessage); // Send this to the frontend via SSE
+        res.status(200).json({ bestMove: result.bestmove });
+      }
+    );
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
