@@ -10,7 +10,7 @@
   <div id="log"></div>
 
   <script>
-      const eventSource = new EventSource("/sanctuary/stockfishrouter/sse");
+      const eventSource = new EventSource("http://localhost:7000/sanctuary/stockfishrouter/sse");
 
       eventSource.onmessage = function (event) {
         const data = JSON.parse(event.data);
