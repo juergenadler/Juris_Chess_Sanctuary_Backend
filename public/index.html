@@ -1,16 +1,18 @@
 <!DOCTYPE html>
 <html lang="en">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Stockfish Live Log</title>
-</head>
-<body>
-  <h1>Stockfish live log</h1>
-  <div id="log"></div>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Stockfish Live Log</title>
+  </head>
+  <body>
+    <h1>Stockfish live log</h1>
+    <div id="log"></div>
 
-  <script>
-      const eventSource = new EventSource("http://localhost:7000/sanctuary/stockfishrouter/sse");
+    <script>
+      const eventSource = new EventSource(
+        "http://localhost:8080/sanctuary/stockfishrouter/sse"
+      );
 
       eventSource.onmessage = function (event) {
         const data = JSON.parse(event.data);
@@ -25,6 +27,6 @@
       eventSource.onerror = function (event) {
         console.error("EventSource failed:", event);
       };
-  </script>
-</body>
+    </script>
+  </body>
 </html>
