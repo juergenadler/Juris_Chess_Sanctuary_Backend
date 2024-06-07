@@ -1,8 +1,8 @@
-//
-//  LoggingEngine.js
-//
+// LoggingEngine.js
+
 // This module exports a function that returns a class derived from chess-uci.Engine
 
+// Factory function
 async function initLoggingEngine() {
   const chessUci = await import('chess-uci');
   const Engine = chessUci.Engine;
@@ -18,7 +18,6 @@ async function initLoggingEngine() {
      * @param {function} [onReceive=null] - Callback function for received lines (derived class).
      */
     constructor(path, log = false, log_recv = true, log_send = true, onSend = null, onReceive = null) {
-      // Call the constructor of the base class (Engine)
       super(path, log, log_recv, log_send);
 
       // Additional properties for the derived class
@@ -32,10 +31,14 @@ async function initLoggingEngine() {
      * @return {void}
      */
     send(cmd) {
-      if (this.onSend) {
-        this.onSend(cmd);
+      try {
+        if (this.onSend) {
+          this.onSend(cmd);
+        }
+        super.send(cmd);
+      } catch (error) {
+        console.error(`Error sending command "${cmd}": ${error.message}`);
       }
-      super.send(cmd);
     }
 
     /**
@@ -44,10 +47,14 @@ async function initLoggingEngine() {
      * @return {void}
      */
     parse(line) {
-      if (this.onReceive) {
-        this.onReceive(line);
+      try {
+        if (this.onReceive) {
+          this.onReceive(line);
+        }
+        super.parse(line);
+      } catch (error) {
+        console.error(`Error parsing line "${line}": ${error.message}`);
       }
-      super.parse(line);
     }
 
     /**
@@ -61,9 +68,14 @@ async function initLoggingEngine() {
      * @return {LoggingEngine}
      */
     static async start(path, log = false, log_recv = true, log_send = true, onSend = null, onReceive = null) {
-      const engine = new LoggingEngine(path, log, log_recv, log_send, onSend, onReceive);
-      await engine.uci();
-      return engine;
+      try {
+        const engine = new LoggingEngine(path, log, log_recv, log_send, onSend, onReceive);
+        await engine.uci();
+        return engine;
+      } catch (error) {
+        console.error(`Error starting engine: ${error.message}`);
+        throw error;
+      }
     }
   }
 
