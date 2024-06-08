@@ -1,18 +1,21 @@
 // Stockfishcontroller.js 
 
 const mongoose = require('mongoose');
-const { Chess } = require('chess.js');
 const fs = require('fs').promises;
 const path = require('path');
 
+// Importing the implementation functions from the controller for the PGN schema
 const PgnSchema = require('../schemas/pgnSchema');
 const {
   addPgnToDBImpl,
   getPgnByPgnIdImpl,
   updatePgnByPgnIdImpl
-} = require('./pgnController'); // Importing the implementation functions from the controller
+} = require('./pgnController');
 
-const initLoggingEngine = require('./LoggingEngine'); // Import the LoggingEngine initialization function
+// Import the LoggingEngine initialization function. This function is asynchronous and returns a promise.
+// The promise resolves to the LoggingEngine class, which is derived from chess-uci.Engine. (This is because we are obliged to import
+// the chess-uci package new style, as we are using ES6 modules in the LoggingEngine.js file.)
+const initLoggingEngine = require('./LoggingEngine');
 
 // Path to the Stockfish engine executable. Actually we are in the controllers folder, so we need to go up two levels to find the engines folder.
 const stockfishPath = '../../engines/stockfish/16/stockfish-windows-x86-64-sse41-popcnt.exe';
@@ -58,7 +61,9 @@ const sendLogUpdateSent = (data) => {
 let stockfish; // Stockfish engine instance, is being initialized in initEngine.
 
 //
-// initEngine: Initialize Stockfish
+// initEngine: POST: /engine/init
+//
+// Initialize Stockfish
 //
 const initEngine = async (req, res) => {
   try {
@@ -85,9 +90,8 @@ const initEngine = async (req, res) => {
 
 
 //
-// quitEngine
+// quitEngine: POST: /engine/quit
 //
-// POST: /engine/quit
 const quitEngine = async (req, res) => {
   try {
     if (!stockfish) {
@@ -104,30 +108,42 @@ const quitEngine = async (req, res) => {
   }
 };
 
+// Store the result of the analysis here.
+// Reinitialize the variable in every function that calls the go() function before calling it.
 //
-// stopEngine: Stop the Stockfish engine calculations
+// See getBestMove() function.
+// Keep in mind that the result of the analysis are stored in LAN format.
+
+let s_analysisResult = ""; 
+
 //
-// POST: /engine/stop
+// stopEngine: POST /engine/stop
+//
+// Stop the Stockfish engine calculations. 
+// Best move found so far can be retrieved from the callback function of the go() function.
+// 
 const stopEngine = async (req, res) => {
   try {
     if (!stockfish) {
       return res.status(500).json({ error: 'Stockfish engine is not initialized.' });
     }
 
-    const result = await stockfish.stop(); // How to get the best move?
-    res.status(200).json({ status: 'Stockfish calculations stopped!' });
+    // We can only stop the engine here. Contrary to the go() function, stop() does not return the best move
+    // that has been found so far. This functionality is only available in the go() function when eveluatiing the callbacks.
+
+    await stockfish.stop();
+  
+    res.status(200).json({ status: 'Analysis stopped. Use GET /engine/bestmove to see the results so far!'});
   } catch (error) {
     console.error('Failed to stop calculations:', error);
     res.status(500).json({ error: 'Failed to stop calculations', details: error.message });
   }
 };
 
-
-
 /**
- * MakeMove
- * POST: /engine/move/:depth
- * Handles a request to make a move with the Stockfish engine.
+ * MakeMove: POST /engine/move/:depth
+ * 
+ * Make a move with the Stockfish engine, essentially performing the go() function.
  * The search depth for the move can be specified as a parameter in the URL.
  * If no depth is specified, a default value of 20 is used.
  *
@@ -143,25 +159,23 @@ const makeMove = async (req, res) => {
     }
 
     const depth = req.params.depth || 20;
+    s_analysisResult = ""; // Reset the analysis result. 
 
     stockfish.go(
       { depth: Number(depth) },
-      //  (info) => {
-      //    if (info.depth) {
-      //      const logMessage = `depth: ${info.depth}, info: ${JSON.stringify(
-      //        info
-      //      )}`;
-      //      console.log(logMessage);
-      //      sendLogUpdateSent(logMessage); // Send this to the frontend via SSE
-      //    }
-      //  },
-      //  (result) => {
-      //    const bestpv = stockfish.pvs[0];
-      //    const logMessage = `${bestpv.score.str}/${bestpv.depth} ${result.bestmove} in ${bestpv.time}ms, ${bestpv.nodes} searched`;
-      //    console.log(logMessage);
-      //    sendLogUpdateSent(logMessage); // Send this to the frontend via SSE
-      //    res.status(200).json({ bestMove: result.bestmove });
-      //  }
+      null,
+      (result) => {
+        s_analysisResult = result.bestmove; 
+        sendLogUpdateSent(result.bestmove); // Send this to the frontend via SSE
+        // Contrary to the stopEngine/analyze mechanism,
+        // we have two use cases here:
+        // 1) go() is called within makeMove() and ends with the best move naturally.
+        // In this case the next line is correct and useful :-) because we are on the same endpoint.
+        // 2) go() is called and terminated by stop() or analyze().
+        // Then we have to retrieve the best move from the global variable s_analysisResult
+        // via GET /engine/bestmove
+        res.status(200).json({ status: 'Best move found so far: ', bestMove: result.bestmove });
+      }
     );
   } catch (error) {
     console.error("Failed to make move:", error);
@@ -173,47 +187,60 @@ const makeMove = async (req, res) => {
 
 
 //
-//  analyze
-// 
-//  POST: /engine/analyze
-//  Summary: Set analysis modus that can be interrrupted by stopping the engine. So you have to stop the engine explicitly.
-//  Example: POST http://localhost:7000/stockfishrouter/engine/analyze
-//   const data = await response.json();
-//   const bestMove = data.bestmove;
-//   const ponder = data.ponder;
+//  analyze:  POST /engine/analyze
 //
+//  Example: POST http://localhost:7000/stockfishrouter/engine/analyze
+//
+//  Summary: Set analysis modus. This mode can be interrrupted by stopping the engine.
+//  So we have to stop the engine explicitly.
+//  Problem here
+// 
 const analyze = async (req, res) => {
   try {
+    s_analysisResult = ""; // Reset the analysis result
+
     stockfish.go(
-      //{ depth: "infinite" }, // anything else to set the engine in analysis mode crashes the app
-      //(info) => {
-      //  if (info.depth) {
-      //    const logMessage = `depth: ${info.depth}, info: ${JSON.stringify(
-      //      info
-      //    )}`;
-      //    console.log(logMessage);
-      //    sendLogUpdateSent(logMessage); // Send this to the frontend via SSE
-      //  }
-      //},
-      //(result) => {
-      //  const bestpv = stockfish.pvs[0];
-      //  const logMessage = `${bestpv.score.str}/${bestpv.depth} ${result.bestmove} in ${bestpv.time}ms, ${bestpv.nodes} searched`;
-      //  console.log(logMessage);
-      //  sendLogUpdateSent(logMessage); // Send this to the frontend via SSE
-      //  res.status(200).json({ bestMove: result.bestmove });
-      //}
+      { depth: "infinite" }, // anything else to set the engine in analysis mode crashes the app
+      null,
+      (result) => {
+        s_analysisResult = result.bestmove;
+        sendLogUpdateSent(result.bestmove); // Send this to the frontend via SSE
+
+        // Ironically we can retrieve the best move here, but not in the stopEngine function.
+        // So we have to store it in a global variable and retrieve it from there.
+        // This means we retrieve the best move in this order:
+        // POST /engine/analyze -> POST /engine/stop -> GET /engine/bestmove
+        // So the next line is correct but useless :-|
+        res.status(200).json({ status: 'Best move found so far: ', bestMove: result.bestmove });
+      }
     );
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
 };
 
+//
+// getBestMove: GET /engine/bestmove
+//
+const getBestMove = async (req, res) => {
+  try {
+    if (!s_analysisResult) {
+      return res.status(404).json({ error: 'No analysis result available.' });
+    }
+
+    res.status(200).json({ status: 'Best move found so far: ', bestMove: s_analysisResult });
+  } catch (error) {
+    console.error('Failed to retrieve best move:', error);
+    res.status(500).json({ error: 'Failed to retrieve best move', details: error.message });
+  }
+};
+
+
 
 //
-//  Setposition
-//  POST: /engine/setposition
+//  setPosition: POST /engine/setposition
 //
-// Expecting FEN string and LAN array in the request body. We can handle this as JSON object,
+// Expecting a FEN string and a LAN array in the request body. We can handle this as JSON object,
 // also in Postman, we can use the raw JSON format to send the request.
 //
 // The moves in the "position" command of the UCI protocol are expected to be in
@@ -252,8 +279,9 @@ const setPosition = async (req, res) => {
 
 
 //
-// setMoves: A variation of setPosition() that accepts moves as a URL parameter
-// POST: /engine/setmoves/:moves
+// setMoves: POST /engine/setmoves/:moves
+//
+// A variation of setPosition() that accepts moves as an URL parameter
 //
 const setMoves = async (req, res) => {
   try {
@@ -309,8 +337,9 @@ const setMoves = async (req, res) => {
 
 
 //
-// load game by pgn id
-// GET: /game/:id
+// loadGame: GET /game/:id
+// load game by pgn_id
+// 
 //
 const loadGame = async (req, res) => {
   const { id } = req.params;
@@ -328,12 +357,11 @@ const loadGame = async (req, res) => {
 
 
 ///
-// saveGame
+// saveGame: POST /game
 //
 // save a game as new, so we need the pg_id returned to use it
 //
 // Parameters: req.body
-//
 //
 const saveGame = async (req, res) => {
   try {
@@ -346,7 +374,7 @@ const saveGame = async (req, res) => {
 };
 
 //
-// updateGame
+// updateGame: PUT /game/:id
 // 
 const updateGame = async (req, res) => {
   const { id } = req.params;
@@ -381,6 +409,12 @@ const sse = (req, res) => {
 
   clients.push(newClient);
 
+  setInterval(() => {
+    console.log("SSE Connection still alive");
+    // res.write('data: ' + JSON.stringify({ message: 'SSE still alive' }) + '\n\n');
+  }, 5000);
+
+
   req.on("close", () => {
     console.log("SSE CONNECTION CLOSED");
     clients = clients.filter((client) => client.id !== clientId);
@@ -400,5 +434,6 @@ module.exports = {
   saveGame,
   loadGame,
   updateGame,
-  sse
+  sse,
+  getBestMove
 };

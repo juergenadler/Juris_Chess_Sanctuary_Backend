@@ -16,7 +16,8 @@ const {
   saveGame,
   loadGame,
   updateGame,
-  sse
+  sse,
+  getBestMove
 } = require("../controllers/stockfishController");
 
 // Initialize the Stockfish engine
@@ -27,6 +28,9 @@ router.post('/engine/quit', quitEngine);
 
 // Stop the Stockfish engine calculations
 router.post('/engine/stop', stopEngine);
+
+// Get the best move from the Stockfish engine
+router.get('/engine/bestmove', getBestMove);
 
 // Set the position of the chess board via request body
 router.post('/engine/setposition', setPosition);

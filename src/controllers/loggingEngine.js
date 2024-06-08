@@ -1,6 +1,14 @@
 // LoggingEngine.js
 
 // This module exports a function that returns a class derived from chess-uci.Engine
+// The derived class, LoggingEngine, adds two callback functions for logging sent commands and received lines
+// Further information on the chess-uci package can be found at:
+// https://www.npmjs.com/package/chess-uci  
+// https://github.com/tidynail/chess-uci
+// especially the Engine class at: 
+// https://github.com/tidynail/chess-uci/blob/main/src/engine.js
+// Some examples of the chess-uci package can be found at:
+// https://www.npmjs.com/package/chess-uci
 
 // Factory function
 async function initLoggingEngine() {
