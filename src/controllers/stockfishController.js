@@ -1,11 +1,9 @@
 // Stockfishcontroller.js 
 
-const mongoose = require('mongoose');
 const fs = require('fs').promises;
 const path = require('path');
 
 // Importing the implementation functions from the controller for the PGN schema
-const PgnSchema = require('../schemas/pgnSchema');
 const {
   addPgnToDBImpl,
   getPgnByPgnIdImpl,
@@ -18,8 +16,8 @@ const {
 const initLoggingEngine = require('./LoggingEngine');
 
 // Path to the Stockfish engine executable. Actually we are in the controllers folder, so we need to go up two levels to find the engines folder.
-const stockfishPath = '../../engines/stockfish/16/stockfish-windows-x86-64-sse41-popcnt.exe';
-const enginePath = path.resolve(__dirname, stockfishPath);
+// @REVIEW: Place engine name in .env
+const stockfishPath = path.resolve(__dirname, '../../engines/stockfish/16/stockfish-windows-x86-64-sse41-popcnt.exe');
 
 /// FEN start position for the chess board. As we are using the UCI protocol, we need to provide the initial position in Forsyth-Edwards Notation (FEN).
 // As we build up the game history from the initial position by adding a moves array we need this constant more often ;-)
@@ -44,17 +42,21 @@ const isExecutable = async (filePath) => {
 };
 
 
-// Send log updates to all connected clients via SSE. Called by the overrides in the LoggingEngine class.
+// Send log updates to all connected clients via SSE. 
 const sendLogUpdateReceived = (data) => {
   clients.forEach((client) =>
-    client.res.write(`<< ${JSON.stringify(data)}\n\n`)
+    client.res.write(
+      `event: message\nid: ${Date.now()}\ndata: ${JSON.stringify(data)}\n\n`
+    )
   );
 };
 
-// Send log updates to all connected clients via SSE. Called by the overrides in LoggingEngine class.
+// Send log updates to all connected clients via SSE. 
 const sendLogUpdateSent = (data) => {
   clients.forEach((client) =>
-    client.res.write(`>> ${JSON.stringify(data)}\n\n`)
+    client.res.write(
+      `event: message\nid: ${Date.now()}\ndata: ${JSON.stringify(data)}\n\n`
+    )
   );
 };
 
@@ -66,12 +68,21 @@ let stockfish; // Stockfish engine instance, is being initialized in initEngine.
 // Initialize Stockfish
 //
 const initEngine = async (req, res) => {
+  console.log("STARTING INIT ENGINE");
   try {
-    await doesExist(enginePath);
-    await isExecutable(enginePath);
+    await doesExist(stockfishPath);
+    await isExecutable(stockfishPath);
+    console.log("STOCKFISH INSIDE INIT");
     if (!stockfish) {
       const LoggingEngine = await initLoggingEngine();
-      stockfish = await LoggingEngine.start(enginePath, true, true, true, sendLogUpdateSent, sendLogUpdateReceived);
+      stockfish = await LoggingEngine.start(
+        stockfishPath,
+        true,
+        true,
+        true,
+        sendLogUpdateSent,
+        sendLogUpdateReceived
+      );
 
       stockfish.position();      // Set the initial position
       await stockfish.isready(); // Wait for the engine to be ready
@@ -95,7 +106,9 @@ const initEngine = async (req, res) => {
 const quitEngine = async (req, res) => {
   try {
     if (!stockfish) {
-      return res.status(500).json({ error: 'Stockfish engine is not initialized.' });
+      return res
+        .status(500)
+        .json({ error: "Stockfish engine is not initialized." });
     }
 
     await stockfish.quit();
@@ -125,18 +138,22 @@ let s_analysisResult = "";
 const stopEngine = async (req, res) => {
   try {
     if (!stockfish) {
-      return res.status(500).json({ error: 'Stockfish engine is not initialized.' });
+      return res
+        .status(500)
+        .json({ error: "Stockfish engine is not initialized." });
     }
 
     // We can only stop the engine here. Contrary to the go() function, stop() does not return the best move
-    // that has been found so far. This functionality is only available in the go() function when eveluatiing the callbacks.
+    // that has been found so far. This functionality is only available in the go() function when eveluating the callbacks.
 
     await stockfish.stop();
   
     res.status(200).json({ status: 'Analysis stopped. Use GET /engine/bestmove to see the results so far!'});
   } catch (error) {
     console.error('Failed to stop calculations:', error);
-    res.status(500).json({ error: 'Failed to stop calculations', details: error.message });
+    res
+      .status(500)
+      .json({ error: "Failed to stop calculations", details: error.message });
   }
 };
 
@@ -264,7 +281,9 @@ const getBestMove = async (req, res) => {
 const setPosition = async (req, res) => {
   try {
     if (!stockfish) {
-      return res.status(500).json({ error: 'Stockfish engine is not initialized.' });
+      return res
+        .status(500)
+        .json({ error: "Stockfish engine is not initialized." });
     }
 
     const fen = req.body.fen || FENstartposition; // Use the FEN string from the request body, or the start position if it's not provided
@@ -273,7 +292,9 @@ const setPosition = async (req, res) => {
     res.status(200).json({ status: 'Position set successfully' });
   } catch (error) {
     console.error('Failed to set position:', error);
-    res.status(500).json({ error: 'Failed to set position', details: error.message });
+    res
+      .status(500)
+      .json({ error: "Failed to set position", details: error.message });
   }
 };
 
@@ -393,32 +414,33 @@ const updateGame = async (req, res) => {
 // SSE endpoint to handle client connections
 let clients = []; // Array to hold SSE clients
 
+//
+// sse: GET /sse
+//
+// Send log updates to all connected clients via SSE. 
+//
 const sse = (req, res) => {
-  console.log("SSE Connection established");
+  try {
+    res.setHeader("Content-Type", "text/event-stream");
+    res.setHeader("Cache-Control", "no-cache");
+    res.setHeader("Connection", "keep-alive");
+    res.flushHeaders(); // flush the headers to establish SSE connection
 
-  res.setHeader("Content-Type", "text/event-stream");
-  res.setHeader("Cache-Control", "no-cache");
-  res.setHeader("Connection", "keep-alive");
-  res.status(200).flushHeaders(); // Send the headers and establish the SSE connection
+    const clientId = Date.now();
+    const newClient = {
+      id: clientId,
+      res,
+    };
 
-  const clientId = Date.now();
-  const newClient = {
-    id: clientId,
-    res,
-  };
+    clients.push(newClient);
 
-  clients.push(newClient);
-
-  setInterval(() => {
-    console.log("SSE Connection still alive");
-    // res.write('data: ' + JSON.stringify({ message: 'SSE still alive' }) + '\n\n');
-  }, 5000);
-
-
-  req.on("close", () => {
-    console.log("SSE CONNECTION CLOSED");
-    clients = clients.filter((client) => client.id !== clientId);
-  });
+    req.on("close", () => {
+      console.log("SSE CONNECTION CLOSED");
+      clients = clients.filter((client) => client.id !== clientId);
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
 };
 
 
