@@ -55,8 +55,8 @@ async function main() {
     app.use(`${basePath}/pgnrouter`, pgnRouter);
     app.use(`${basePath}/stockfishrouter`, stockfishRouter);
 
-    // const expressListEndpoints = require('express-list-endpoints');
-    // console.log(expressListEndpoints(app));
+    const expressListEndpoints = require("express-list-endpoints");
+    console.log(expressListEndpoints(app));
 
     const server = app.listen(PORT, () => {
       console.log(`Server listening on http://localhost:${PORT}`.green); // cannot read .rainbow :-P

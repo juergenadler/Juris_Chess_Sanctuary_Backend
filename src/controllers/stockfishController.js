@@ -8,9 +8,9 @@ const {
 } = require("./pgnController");
 const initLoggingEngine = require("./loggingEngine");
 
-const stockfishPath =
-  "../../engines/stockfish/16/stockfish-windows-x86-64-sse41-popcnt.exe";
-const enginePath = path.resolve(__dirname, stockfishPath);
+const stockfishPath = path.resolve(
+  "/home/reagan/Desktop/Juris_Chess_Sanctuary_Backend/engines/stockfish/stockfish-ubuntu-x86-64-sse41-popcnt"
+);
 
 const FENstartposition =
   "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
@@ -33,30 +33,32 @@ const isExecutable = async (filePath) => {
 
 const sendLogUpdateReceived = (data) => {
   clients.forEach((client) =>
-    client.res.write(`<< ${JSON.stringify(data)}\n\n`)
+    client.res.write(
+      `event: message\nid: ${Date.now()}\ndata: ${JSON.stringify(data)}\n\n`
+    )
   );
 };
 
 const sendLogUpdateSent = (data) => {
   clients.forEach((client) =>
-    client.res.write(`>> ${JSON.stringify(data)}\n\n`)
+    client.res.write(
+      `event: message\nid: ${Date.now()}\ndata: ${JSON.stringify(data)}\n\n`
+    )
   );
 };
 
 let stockfish;
 
-//
-//
 const initEngine = async (req, res) => {
   console.log("STARTING INIT ENGINE");
   try {
-    await doesExist(enginePath);
-    await isExecutable(enginePath);
+    await doesExist(stockfishPath);
+    await isExecutable(stockfishPath);
     console.log("STOCKFISH INSIDE INIT");
     if (!stockfish) {
       const LoggingEngine = await initLoggingEngine();
       stockfish = await LoggingEngine.start(
-        enginePath,
+        stockfishPath,
         true,
         true,
         true,
@@ -124,8 +126,8 @@ const makeMove = async (req, res) => {
     }
 
     const depth = req.params.depth || 20;
-
-    stockfish.go({ depth: Number(depth) });
+    await stockfish.go({ depth: Number(depth) });
+    res.status(200).json({ status: "Move initiated", depth: Number(depth) });
   } catch (error) {
     console.error("Failed to make move:", error);
     res
@@ -136,7 +138,8 @@ const makeMove = async (req, res) => {
 
 const analyze = async (req, res) => {
   try {
-    stockfish.go();
+    await stockfish.go();
+    res.status(200).json({ status: "Analysis started" });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -152,6 +155,7 @@ const setPosition = async (req, res) => {
 
     const fen = req.body.fen || FENstartposition;
     const moves = req.body.moves || [];
+    await stockfish.position({ fen, moves });
     res.status(200).json({ status: "Position set successfully" });
   } catch (error) {
     console.error("Failed to set position:", error);
@@ -238,25 +242,27 @@ const updateGame = async (req, res) => {
 
 let clients = [];
 const sse = (req, res) => {
-  console.log("SSE Connection established");
+  try {
+    res.setHeader("Content-Type", "text/event-stream");
+    res.setHeader("Cache-Control", "no-cache");
+    res.setHeader("Connection", "keep-alive");
+    res.flushHeaders(); // flush the headers to establish SSE connection
 
-  res.setHeader("Content-Type", "text/event-stream");
-  res.setHeader("Cache-Control", "no-cache");
-  res.setHeader("Connection", "keep-alive");
-  res.status(200).flushHeaders();
+    const clientId = Date.now();
+    const newClient = {
+      id: clientId,
+      res,
+    };
 
-  const clientId = Date.now();
-  const newClient = {
-    id: clientId,
-    res,
-  };
+    clients.push(newClient);
 
-  clients.push(newClient);
-
-  req.on("close", () => {
-    console.log("SSE CONNECTION CLOSED");
-    clients = clients.filter((client) => client.id !== clientId);
-  });
+    req.on("close", () => {
+      console.log("SSE CONNECTION CLOSED");
+      clients = clients.filter((client) => client.id !== clientId);
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
 };
 
 module.exports = {
