@@ -51,6 +51,7 @@ const sendLogUpdateReceived = (data) => {
   );
 };
 
+
 // Send log updates to all connected clients via SSE. 
 const sendLogUpdateSent = (data) => {
   clients.forEach((client) =>

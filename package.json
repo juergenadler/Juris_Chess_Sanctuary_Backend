@@ -13,20 +13,22 @@
   "dependencies": {
     "@mliebelt/pgn-parser": "^1.4.15",
     "bcrypt": "^5.1.1",
+    "cache": "^3.0.0",
     "chess-uci": "^0.5.1",
     "chess.js": "^1.0.0-beta.8",
+    "clean": "^4.0.2",
     "colors": "^1.4.0",
     "cors": "^2.8.5",
-    "dotenv": "^16.3.1",
-    "express": "^4.18.2",
+    "dotenv": "^16.4.5",
+    "express": "^4.21.1",
     "jsonwebtoken": "^9.0.2",
-    "mongoose": "^7.6.11",
+    "mongoose": "^8.8.1",
     "multer": "^1.4.5-lts.1",
-    "uuid": "^9.0.1",
-    "validator": "^13.11.0"
+    "uuid": "^11.0.2",
+    "validator": "^13.12.0"
   },
   "devDependencies": {
     "express-list-endpoints": "^7.1.0",
-    "nodemon": "^3.1.0"
+    "nodemon": "^3.1.7"
   }
 }
